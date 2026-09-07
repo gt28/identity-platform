@@ -1,0 +1,20 @@
+{
+  "organization": {{ {
+    "name": keycloak_demo_company_name,
+    "slug": keycloak_demo_company_slug,
+    "oidc_tenant_id": keycloak_demo_company_organization_id,
+    "issuer": keycloak_external_url + "/realms/" + keycloak_realm_name,
+    "admin_username": keycloak_demo_company_admin_username
+  } | to_json }},
+  "users": [
+{% for result in keycloak_demo_company_final_users.results %}
+    {{ {
+      "username": result.item.username,
+      "subject": result.json[0].id,
+      "email": result.item.username + "@" + keycloak_demo_company_email_domain,
+      "display_name": result.item.first_name + " " + result.item.last_name,
+      "role": result.item.vmp_role
+    } | to_json }}{% if not loop.last %},{% endif %}
+{% endfor %}
+  ]
+}

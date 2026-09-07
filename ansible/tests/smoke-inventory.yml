@@ -1,0 +1,49 @@
+---
+# Disposable GitHub-hosted Ubuntu VM only. Never use this inventory in production.
+all:
+  children:
+    auth_servers:
+      hosts:
+        localhost:
+          ansible_connection: local
+          ansible_python_interpreter: /usr/bin/python3
+      vars:
+        system_admin_user: "{{ lookup('ansible.builtin.env', 'USER') }}"
+        system_admin_public_keys:
+          - "{{ lookup('ansible.builtin.file', inventory_dir + '/../.private/smoke-key.pub') }}"
+        system_update_packages: false
+        system_reboot_after_update: false
+        system_firewall_services: [ssh, https]
+        # Replacement is explicitly permitted only on this disposable runner.
+        docker_remove_conflicting_packages: true
+        keycloak_external_host: localhost
+        keycloak_external_url: https://localhost
+        keycloak_tls_mode: selfsigned
+        keycloak_tls_common_name: localhost
+        keycloak_tls_subject_alt_names: [DNS:localhost, IP:127.0.0.1]
+        keycloak_tls_fetch_path: "{{ inventory_dir }}/../.private/smoke-ca.crt"
+        keycloak_realm_validate_certs: false
+        keycloak_admin_user: smoke-admin
+        keycloak_admin_password: >-
+          {{ lookup('ansible.builtin.password', inventory_dir + '/../.private/smoke-admin-password length=40 chars=ascii_letters,digits') }}
+        keycloak_db_password: >-
+          {{ lookup('ansible.builtin.password', inventory_dir + '/../.private/smoke-db-password length=48 chars=ascii_letters,digits') }}
+        keycloak_realm_name: company
+        keycloak_ldap_enabled: false
+        keycloak_oidc_clients:
+          - client_id: identity-smoke
+            name: Disposable identity test
+            owner: Identity CI
+            environment: lab
+            public_client: true
+            redirect_uris: [https://localhost/smoke/callback]
+            attributes:
+              pkce.code.challenge.method: S256
+            protocol_mappers:
+              - name: smoke-audience
+                protocol: openid-connect
+                protocolMapper: oidc-audience-mapper
+                config:
+                  included.custom.audience: identity-smoke-api
+                  access.token.claim: "true"
+                  id.token.claim: "false"

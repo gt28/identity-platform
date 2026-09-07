@@ -1,0 +1,11 @@
+FROM {{ keycloak_image_repository }}:{{ keycloak_image_tag }} AS builder
+
+ENV KC_DB=postgres
+ENV KC_HEALTH_ENABLED=true
+ENV KC_METRICS_ENABLED=true
+
+WORKDIR /opt/keycloak
+RUN /opt/keycloak/bin/kc.sh build
+
+FROM {{ keycloak_image_repository }}:{{ keycloak_image_tag }}
+COPY --from=builder --chown=1000:0 /opt/keycloak/ /opt/keycloak/

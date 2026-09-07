@@ -1,0 +1,33 @@
+---
+- name: Update installed Ubuntu packages
+  ansible.builtin.apt:
+    upgrade: safe
+    update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
+  when: system_update_packages | bool
+
+- name: Install Ubuntu baseline packages
+  ansible.builtin.apt:
+    name: "{{ system_packages }}"
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
+
+- name: Check whether Ubuntu needs a reboot
+  ansible.builtin.stat:
+    path: /var/run/reboot-required
+  register: system_reboot_required
+
+- name: Reboot Ubuntu only when required and explicitly allowed
+  ansible.builtin.reboot:
+    msg: Reboot initiated by the system_baseline Ansible role
+    reboot_timeout: 900
+  when:
+    - system_reboot_after_update | bool
+    - system_reboot_required.stat.exists
+
+- name: Require AppArmor kernel support on Ubuntu
+  ansible.builtin.command: aa-enabled
+  changed_when: false

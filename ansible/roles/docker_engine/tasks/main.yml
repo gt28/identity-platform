@@ -1,0 +1,74 @@
+---
+- name: Validate Docker host compatibility
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Install operating system Docker packages
+  ansible.builtin.include_tasks:
+    file: "{{ 'Ubuntu' if ansible_facts.distribution == 'Ubuntu' else 'RedHat' }}.yml"
+
+- name: Create the Docker configuration directory
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Configure Docker daemon safeguards
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart Docker
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Add explicitly approved operators to the Docker group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ docker_users }}"
+
+- name: Apply pending Docker configuration changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Verify Docker Engine is available
+  ansible.builtin.command:
+    argv:
+      - docker
+      - info
+      - --format
+      - "{{ '{{' }}.ServerVersion{{ '}}' }}"
+  changed_when: false
+
+- name: Read the installed Docker Compose plugin version
+  ansible.builtin.command: docker compose version --short
+  changed_when: false
+  register: docker_compose_version
+
+- name: Require a supported Compose plugin
+  ansible.builtin.assert:
+    that:
+      - docker_compose_version.stdout | trim | regex_replace('^v', '') is version(docker_compose_min_version, '>=')
+    fail_msg: Install the Docker Compose CLI plugin; legacy docker-compose is not supported.
+
+- name: Inspect Docker security mechanisms on Ubuntu
+  ansible.builtin.command:
+    argv: [docker, info, --format, "{{ '{{json .SecurityOptions}}' }}"]
+  changed_when: false
+  register: docker_security_options
+  when: ansible_facts.distribution == 'Ubuntu'
+
+- name: Require Docker AppArmor integration on Ubuntu
+  ansible.builtin.assert:
+    that:
+      - "'name=apparmor' in (docker_security_options.stdout | from_json)"
+    fail_msg: Docker must report AppArmor support before starting identity containers.
+  when: ansible_facts.distribution == 'Ubuntu'

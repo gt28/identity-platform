@@ -1,0 +1,113 @@
+---
+- name: Validate the host before changing system configuration
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Load operating system package and service names
+  ansible.builtin.include_vars:
+    file: "{{ 'Ubuntu' if ansible_facts.distribution == 'Ubuntu' else 'RedHat' }}.yml"
+    name: system_platform
+
+- name: Configure the system hostname
+  ansible.builtin.hostname:
+    name: "{{ system_hostname }}"
+
+- name: Configure the system timezone
+  community.general.timezone:
+    name: "{{ system_timezone }}"
+
+- name: Apply operating system baseline
+  ansible.builtin.include_tasks:
+    file: "{{ 'Ubuntu' if ansible_facts.distribution == 'Ubuntu' else 'RedHat' }}.yml"
+
+- name: Enable core security and time services
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: "{{ system_core_services }}"
+
+- name: Enable auditd at boot
+  ansible.builtin.systemd_service:
+    name: auditd
+    enabled: true
+
+- name: Ensure the automation account has approved SSH keys
+  ansible.posix.authorized_key:
+    user: "{{ system_admin_user }}"
+    key: "{{ item }}"
+    state: present
+    exclusive: false
+  loop: "{{ system_admin_public_keys }}"
+  no_log: true
+
+- name: Maintain passwordless sudo for the automation account
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-{{ system_admin_user }}-automation"
+    content: "{{ system_admin_user }} ALL=(ALL) NOPASSWD: ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+
+- name: Lock the automation account password after key installation
+  ansible.builtin.user:
+    name: "{{ system_admin_user }}"
+    password_lock: true
+  when:
+    - system_lock_admin_password | bool
+    - system_admin_public_keys | length > 0
+
+- name: Install SSH daemon hardening configuration
+  ansible.builtin.template:
+    src: 50-ansible-hardening.conf.j2
+    # OpenSSH uses the first value; precede Ubuntu cloud-init's 50-cloud-init.conf.
+    dest: /etc/ssh/sshd_config.d/00-identity-hardening.conf
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Validate and reload sshd
+
+- name: Remove the superseded identity-platform SSH drop-in
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d/50-ansible-hardening.conf
+    state: absent
+  notify: Validate and reload sshd
+
+- name: Apply pending SSH handler before firewall changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Inspect effective SSH daemon policy
+  ansible.builtin.command: /usr/sbin/sshd -T
+  changed_when: false
+  register: system_sshd_effective
+
+- name: Require effective key-only SSH authentication
+  ansible.builtin.assert:
+    that:
+      - "'passwordauthentication no' in system_sshd_effective.stdout_lines"
+      - "'kbdinteractiveauthentication no' in system_sshd_effective.stdout_lines"
+      - "'permitrootlogin no' in system_sshd_effective.stdout_lines"
+    fail_msg: An earlier SSH setting overrides the identity baseline. Review sshd_config and its drop-ins.
+
+- name: Reject services not explicitly approved by the role
+  ansible.builtin.assert:
+    that:
+      - system_firewall_services | difference(['ssh', 'https', 'http']) | length == 0
+    fail_msg: Review and extend the role allowlist before opening another firewalld service.
+
+- name: Allow approved firewalld services
+  ansible.posix.firewalld:
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: enabled
+  loop: "{{ system_firewall_services }}"
+
+- name: Disable unapproved default firewalld services
+  ansible.posix.firewalld:
+    service: "{{ item }}"
+    permanent: true
+    immediate: true
+    state: disabled
+  loop: "{{ system_firewall_disabled_services }}"
+  when: item not in system_firewall_services

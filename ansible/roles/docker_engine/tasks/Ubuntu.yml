@@ -1,0 +1,97 @@
+---
+- name: Gather installed Ubuntu packages
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Identify conflicting Ubuntu container packages
+  ansible.builtin.set_fact:
+    docker_conflicting_packages: >-
+      {{ ansible_facts.packages.keys() | intersect(['docker.io', 'docker-compose', 'docker-compose-v2', 'docker-doc',
+      'docker-buildx', 'podman-docker', 'containerd', 'runc']) | sort }}
+
+- name: Require explicit approval before replacing existing container packages
+  ansible.builtin.assert:
+    that:
+      - docker_conflicting_packages | length == 0 or docker_remove_conflicting_packages | bool
+    fail_msg: >-
+      Conflicting packages found: {{ docker_conflicting_packages | join(', ') }}.
+      Migrate existing workloads first, then explicitly set docker_remove_conflicting_packages=true.
+
+- name: Remove explicitly approved conflicting Ubuntu container packages
+  ansible.builtin.apt:
+    name: "{{ docker_conflicting_packages }}"
+    state: absent
+    lock_timeout: 300
+  when:
+    - docker_remove_conflicting_packages | bool
+    - docker_conflicting_packages | length > 0
+
+- name: Install APT repository tooling
+  ansible.builtin.apt:
+    name: [ca-certificates, gnupg, python3-debian, python3-requests]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 300
+
+- name: Create the APT keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download the Docker APT repository signing key
+  ansible.builtin.get_url:
+    url: "{{ docker_gpg_key_url }}"
+    dest: /etc/apt/keyrings/docker.asc
+    owner: root
+    group: root
+    mode: "0644"
+  register: docker_apt_key_download
+  retries: 4
+  delay: 5
+  until: docker_apt_key_download is succeeded
+
+- name: Read the Docker APT key fingerprint
+  ansible.builtin.command:
+    argv: [gpg, --batch, --with-colons, --show-keys, /etc/apt/keyrings/docker.asc]
+  changed_when: false
+  register: docker_apt_key_info
+  # get_url does not create the key on a first check-mode run.
+  when: not ansible_check_mode
+
+- name: Require the approved Docker APT signing key
+  ansible.builtin.assert:
+    that:
+      - >-
+        (docker_apt_key_info.stdout_lines | select('match', '^fpr:') | first).split(':')[9]
+        == docker_gpg_fingerprint
+    fail_msg: The Docker APT signing key does not match the approved fingerprint.
+  when: not ansible_check_mode
+
+- name: Configure the Docker Noble APT repository with scoped trust
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: [deb]
+    uris: ["{{ docker_repository_base_url }}"]
+    suites: [noble]
+    components: [stable]
+    architectures: ["{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"]
+    signed_by: /etc/apt/keyrings/docker.asc
+    state: present
+    enabled: true
+  register: docker_apt_repository
+
+- name: Refresh package metadata after changing Docker repository trust or location
+  ansible.builtin.apt:
+    update_cache: true
+    lock_timeout: 300
+  when: docker_apt_repository is changed or docker_apt_key_download is changed
+
+- name: Install Docker Engine and Compose APT packages
+  ansible.builtin.apt:
+    name: "{{ docker_packages }}"
+    state: present
+    lock_timeout: 300

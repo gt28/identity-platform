@@ -1,0 +1,15 @@
+---
+- name: Check identity host prerequisites without installing or restarting services
+  hosts: auth_servers
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Validate system and SSH prerequisites
+      ansible.builtin.include_role:
+        name: system_baseline
+        tasks_from: preflight
+
+    - name: Validate Docker platform prerequisites
+      ansible.builtin.include_role:
+        name: docker_engine
+        tasks_from: preflight

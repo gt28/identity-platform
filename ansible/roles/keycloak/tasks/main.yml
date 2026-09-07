@@ -1,0 +1,137 @@
+---
+- name: Validate Keycloak deployment inputs
+  ansible.builtin.assert:
+    that:
+      - keycloak_external_url is match('^https://')
+      - keycloak_admin_user | length > 0
+      - keycloak_admin_password | length >= 24
+      - keycloak_db_password | length >= 24
+      - keycloak_tls_mode in ['provided', 'selfsigned']
+    fail_msg: Keycloak requires HTTPS and independent credentials of at least 24 characters.
+  no_log: true
+
+- name: Create Keycloak deployment directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner | default('root') }}"
+    group: "{{ item.group | default('root') }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - path: "{{ keycloak_deploy_dir }}"
+      mode: "0750"
+    - path: "{{ keycloak_deploy_dir }}/tls"
+      owner: "{{ keycloak_container_uid }}"
+      group: "{{ keycloak_container_gid }}"
+      mode: "0750"
+    - path: "{{ keycloak_deploy_dir }}/truststores"
+      owner: "{{ keycloak_container_uid }}"
+      group: "{{ keycloak_container_gid }}"
+      mode: "0755"
+
+- name: Configure Keycloak TLS certificate
+  ansible.builtin.include_tasks: tls.yml
+
+- name: Install additional Keycloak trust anchors
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ keycloak_deploy_dir }}/truststores/{{ item.dest }}"
+    owner: "{{ keycloak_container_uid }}"
+    group: "{{ keycloak_container_gid }}"
+    mode: "0644"
+  loop: "{{ keycloak_trust_ca_files }}"
+  notify: Restart Keycloak stack
+
+- name: Install optimized Keycloak image definition
+  ansible.builtin.template:
+    src: Containerfile.j2
+    dest: "{{ keycloak_deploy_dir }}/Containerfile"
+    owner: root
+    group: root
+    mode: "0644"
+  register: keycloak_containerfile_result
+  notify: Restart Keycloak stack
+
+- name: Restrict the Keycloak image build context
+  ansible.builtin.copy:
+    src: dockerignore
+    dest: "{{ keycloak_deploy_dir }}/.dockerignore"
+    owner: root
+    group: root
+    mode: "0644"
+  register: keycloak_dockerignore_result
+
+- name: Build the optimized Keycloak image
+  community.docker.docker_image:
+    name: "{{ keycloak_local_image }}"
+    source: build
+    force_source: >-
+      {{ keycloak_containerfile_result.changed or
+      keycloak_dockerignore_result.changed }}
+    build:
+      path: "{{ keycloak_deploy_dir }}"
+      dockerfile: Containerfile
+
+- name: Install Keycloak Compose definition
+  ansible.builtin.template:
+    src: compose.yml.j2
+    dest: "{{ keycloak_deploy_dir }}/compose.yml"
+    owner: root
+    group: root
+    mode: "0640"
+  notify: Restart Keycloak stack
+
+- name: Install Keycloak runtime secrets
+  ansible.builtin.template:
+    src: keycloak.env.j2
+    dest: "{{ keycloak_deploy_dir }}/.env"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart Keycloak stack
+
+- name: Build and start the Keycloak stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ keycloak_deploy_dir }}"
+    files:
+      - compose.yml
+    state: present
+    build: never
+    pull: missing
+    remove_orphans: true
+    wait: true
+    wait_timeout: 300
+  register: keycloak_compose_result
+  retries: 3
+  delay: 10
+  until: keycloak_compose_result is succeeded
+
+- name: Apply pending Keycloak restarts
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for the Keycloak master realm
+  ansible.builtin.uri:
+    url: https://127.0.0.1/realms/master/.well-known/openid-configuration
+    method: GET
+    validate_certs: false
+    status_code: 200
+    return_content: true
+  register: keycloak_master_discovery
+  retries: 60
+  delay: 5
+  until: keycloak_master_discovery.status == 200
+
+- name: Validate the externally advertised issuer
+  ansible.builtin.assert:
+    that:
+      - keycloak_master_discovery.json.issuer == keycloak_external_url + '/realms/master'
+
+- name: Export the lab self-signed certificate to the controller
+  ansible.builtin.fetch:
+    src: "{{ keycloak_deploy_dir }}/tls/tls.crt"
+    dest: "{{ keycloak_tls_fetch_path }}"
+    flat: true
+  when:
+    - keycloak_tls_mode == 'selfsigned'
+    - keycloak_tls_fetch_path | length > 0

@@ -1,0 +1,98 @@
+---
+system_hostname: auth-01
+system_timezone: UTC
+system_update_packages: true
+system_reboot_after_update: false
+system_admin_user: ansible
+system_admin_public_keys:
+  - ssh-ed25519 REPLACE_WITH_APPROVED_KEY automation@example.com
+system_firewall_services:
+  - ssh
+  - https
+
+keycloak_external_host: auth.example.com
+keycloak_external_port: 443
+keycloak_external_url: https://auth.example.com
+keycloak_tls_mode: provided
+keycloak_tls_certificate_src: /secure/controller/path/auth.example.com.fullchain.pem
+keycloak_tls_key_src: /secure/controller/path/auth.example.com.key
+keycloak_tls_common_name: auth.example.com
+keycloak_tls_subject_alt_names:
+  - DNS:auth.example.com
+keycloak_realm_validate_certs: true
+
+# Supply these through Ansible Vault or the automation platform secret store.
+keycloak_admin_user: "{{ vault_keycloak_admin_user }}"
+keycloak_admin_password: "{{ vault_keycloak_admin_password }}"
+keycloak_db_password: "{{ vault_keycloak_db_password }}"
+
+# A production deployment should use a separately operated, encrypted,
+# highly available PostgreSQL service.
+keycloak_manage_postgres: false
+keycloak_db_url: jdbc:postgresql://postgres.example.com:5432/keycloak
+keycloak_db_username: keycloak
+keycloak_db_tls_mode: verify-server
+# This Compose role is a single-node baseline. Keep local cache unless the
+# deployment also provides tested cross-host JGroups networking and a load balancer.
+keycloak_cache: local
+
+keycloak_realm_name: company
+keycloak_realm_display_name: Company SSO
+keycloak_oidc_clients:
+  - client_id: vmp-spa
+    name: VMP browser client
+    owner: VMP team
+    environment: production
+    description: Public Authorization Code client with S256 PKCE for VMP.
+    public_client: true
+    redirect_uris:
+      - https://vmp.example.com/auth/callback
+    web_origins:
+      - https://vmp.example.com
+    post_logout_redirect_uris:
+      - https://vmp.example.com/*
+    attributes:
+      pkce.code.challenge.method: S256
+    protocol_mappers:
+      - name: vmp-api-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: vmp-api
+          id.token.claim: "false"
+          access.token.claim: "true"
+          introspection.token.claim: "true"
+      - name: organization-id
+        protocol: openid-connect
+        protocolMapper: oidc-usermodel-attribute-mapper
+        consentRequired: false
+        config:
+          user.attribute: organization_id
+          claim.name: organization_id
+          jsonType.label: String
+          multivalued: "false"
+          aggregate.attrs: "false"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"
+          introspection.token.claim: "true"
+
+# Register GitLab, private cloud, bastion and other systems as separate entries.
+# Confidential client secrets must come from Ansible Vault; never commit them.
+
+keycloak_ldap_enabled: true
+keycloak_ldap_name: corporate-ldap
+keycloak_ldap_vendor: rhds
+keycloak_ldap_connection_url: ldaps://ipa.example.com:636
+keycloak_ldap_bind_dn: uid=keycloak,cn=sysaccounts,cn=etc,dc=example,dc=com
+keycloak_ldap_bind_credential: "{{ vault_keycloak_ldap_bind_credential }}"
+keycloak_ldap_users_dn: cn=users,cn=accounts,dc=example,dc=com
+keycloak_ldap_username_attribute: uid
+keycloak_ldap_rdn_attribute: uid
+keycloak_ldap_uuid_attribute: ipaUniqueID
+keycloak_ldap_user_object_classes: >-
+  inetOrgPerson, organizationalPerson
+keycloak_trust_ca_files:
+  - src: /secure/controller/path/ipa-ca.pem
+    dest: ipa-ca.pem

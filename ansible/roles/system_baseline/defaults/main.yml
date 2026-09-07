@@ -1,0 +1,16 @@
+---
+system_hostname: "{{ inventory_hostname }}"
+system_timezone: UTC
+system_update_packages: true
+system_reboot_after_update: false
+system_admin_user: ansible
+system_admin_public_keys: []
+system_lock_admin_password: true
+system_firewall_services:
+  - ssh
+system_firewall_disabled_services:
+  - cockpit
+  - dhcpv6-client
+system_packages: "{{ system_platform.packages }}"
+system_ssh_service: "{{ system_platform.ssh_service }}"
+system_core_services: "{{ system_platform.services }}"

@@ -1,0 +1,10 @@
+---
+profile: production
+skip_list:
+  # Keycloak connection and secret variables are intentionally shared by the
+  # keycloak and keycloak_realm roles as one public configuration contract.
+  - var-naming[no-role-prefix]
+exclude_paths:
+  - .cache/
+  - .collections/
+  - .private/

@@ -1,0 +1,16 @@
+---
+# Merge application, TLS, database and LDAP settings from the common production
+# example into auth_servers.yml as documented in docs/ubuntu-24.04.md.
+system_hostname: auth-ubuntu-01
+system_timezone: Asia/Shanghai
+# Plan OS package upgrades and reboots independently of identity releases.
+system_update_packages: false
+system_reboot_after_update: false
+system_admin_user: ansible
+system_admin_public_keys:
+  - ssh-ed25519 REPLACE_WITH_APPROVED_KEY automation@example.com
+system_firewall_services: [ssh, https]
+docker_remove_conflicting_packages: false
+docker_repository_base_url: https://download.docker.com/linux/ubuntu
+docker_gpg_key_url: https://download.docker.com/linux/ubuntu/gpg
+docker_gpg_fingerprint: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88

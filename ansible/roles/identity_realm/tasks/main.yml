@@ -1,0 +1,199 @@
+---
+- name: Wait for the external Keycloak administration endpoint
+  ansible.builtin.uri:
+    url: "{{ keycloak_external_url }}/realms/master/.well-known/openid-configuration"
+    method: GET
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    status_code: 200
+  register: keycloak_external_discovery
+  retries: 30
+  delay: 5
+  until: keycloak_external_discovery.status == 200
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Create or update the application realm
+  community.general.keycloak_realm:
+    auth_client_id: admin-cli
+    auth_keycloak_url: "{{ keycloak_external_url }}"
+    auth_realm: master
+    auth_username: "{{ keycloak_admin_user }}"
+    auth_password: "{{ keycloak_admin_password }}"
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    realm: "{{ keycloak_realm_name }}"
+    display_name: "{{ keycloak_realm_display_name }}"
+    enabled: true
+    ssl_required: "{{ keycloak_realm_ssl_required }}"
+    registration_allowed: false
+    reset_password_allowed: true
+    remember_me: true
+    login_with_email_allowed: true
+    duplicate_emails_allowed: false
+    edit_username_allowed: false
+    verify_email: "{{ keycloak_realm_verify_email }}"
+    brute_force_protected: true
+    permanent_lockout: false
+    failure_factor: 5
+    wait_increment_seconds: 60
+    max_failure_wait_seconds: 900
+    max_delta_time_seconds: 43200
+    password_policy: "{{ keycloak_realm_password_policy }}"
+    access_token_lifespan: "{{ keycloak_realm_access_token_lifespan }}"
+    sso_session_idle_timeout: "{{ keycloak_realm_sso_idle_timeout }}"
+    sso_session_max_lifespan: "{{ keycloak_realm_sso_max_lifespan }}"
+    revoke_refresh_token: true
+    refresh_token_max_reuse: 0
+    events_enabled: true
+    events_expiration: 2592000
+    admin_events_enabled: true
+    admin_events_details_enabled: true
+    otp_policy_type: totp
+    otp_policy_algorithm: HmacSHA256
+    otp_policy_digits: 6
+    otp_policy_period: 30
+    state: present
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Validate enterprise OIDC client registrations
+  ansible.builtin.assert:
+    that:
+      - item.client_id | default('') | length > 0
+      - item.name | default('') | length > 0
+      - item.owner | default('') | length > 0
+      - item.environment | default('') in ['lab', 'development', 'staging', 'production']
+      - item.redirect_uris | default([]) | length > 0
+      - not (item.public_client | default(false) | bool) or item.client_secret is not defined
+      - >-
+        item.public_client | default(false) | bool
+        or item.client_secret | default('') | length >= 24
+    fail_msg: >-
+      Every OIDC client needs an ID, name, redirect URI, and a Vault-managed
+      secret of at least 24 characters unless it is a public PKCE client.
+  loop: "{{ keycloak_oidc_clients }}"
+  loop_control:
+    label: "{{ item.client_id | default('invalid-client') }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Require unique OIDC client IDs
+  ansible.builtin.assert:
+    that:
+      - >-
+        keycloak_oidc_clients | map(attribute='client_id') | list | unique | length
+        == keycloak_oidc_clients | length
+    fail_msg: OIDC client IDs must be unique within the enterprise realm.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Create or update enterprise OIDC clients
+  community.general.keycloak_client:
+    auth_client_id: admin-cli
+    auth_keycloak_url: "{{ keycloak_external_url }}"
+    auth_realm: master
+    auth_username: "{{ keycloak_admin_user }}"
+    auth_password: "{{ keycloak_admin_password }}"
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    realm: "{{ keycloak_realm_name }}"
+    client_id: "{{ item.client_id }}"
+    name: "{{ item.name }}"
+    description: >-
+      {{ item.description
+      | default('Enterprise SSO client managed by Ansible for ' + item.owner + '.') }}
+    enabled: "{{ item.enabled | default(true) }}"
+    protocol: openid-connect
+    public_client: "{{ item.public_client | default(false) }}"
+    client_authenticator_type: client-secret
+    secret: "{{ item.client_secret | default(omit) }}"
+    bearer_only: false
+    standard_flow_enabled: true
+    implicit_flow_enabled: false
+    direct_access_grants_enabled: false
+    service_accounts_enabled: false
+    authorization_services_enabled: false
+    consent_required: false
+    full_scope_allowed: "{{ item.full_scope_allowed | default(false) }}"
+    redirect_uris: "{{ item.redirect_uris }}"
+    web_origins: "{{ item.web_origins | default([]) }}"
+    valid_post_logout_redirect_uris: "{{ item.post_logout_redirect_uris | default([]) }}"
+    default_client_scopes: >-
+      {{ item.default_client_scopes
+      | default(['web-origins', 'acr', 'roles', 'profile', 'basic', 'email']) }}
+    client_scopes_behavior: idempotent
+    attributes: "{{ item.attributes | default({}) }}"
+    protocol_mappers: "{{ item.protocol_mappers | default([]) }}"
+    state: present
+  loop: "{{ keycloak_oidc_clients }}"
+  loop_control:
+    label: "{{ item.client_id }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Configure the Keycloak user profile
+  ansible.builtin.include_tasks: user_profile.yml
+
+- name: Validate LDAP federation inputs
+  ansible.builtin.assert:
+    that:
+      - keycloak_ldap_connection_url is match('^ldaps://') or keycloak_ldap_start_tls | bool
+      - keycloak_ldap_bind_dn | length > 0
+      - keycloak_ldap_bind_credential | length > 0
+      - keycloak_ldap_users_dn | length > 0
+    fail_msg: LDAP federation requires LDAPS or StartTLS and a dedicated bind account.
+  when: keycloak_ldap_enabled | bool
+  no_log: true
+
+- name: Create or update LDAP user federation
+  community.general.keycloak_user_federation:
+    auth_client_id: admin-cli
+    auth_keycloak_url: "{{ keycloak_external_url }}"
+    auth_realm: master
+    auth_username: "{{ keycloak_admin_user }}"
+    auth_password: "{{ keycloak_admin_password }}"
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    realm: "{{ keycloak_realm_name }}"
+    name: "{{ keycloak_ldap_name }}"
+    provider_id: ldap
+    provider_type: org.keycloak.storage.UserStorageProvider
+    bind_credential_update_mode: "{{ keycloak_ldap_bind_credential_update_mode }}"
+    remove_unspecified_mappers: true
+    config:
+      priority: 0
+      enabled: true
+      vendor: "{{ keycloak_ldap_vendor }}"
+      connectionUrl: "{{ keycloak_ldap_connection_url }}"
+      startTls: "{{ keycloak_ldap_start_tls }}"
+      useTruststoreSpi: ldapsOnly
+      connectionPooling: "{{ not keycloak_ldap_start_tls }}"
+      authType: simple
+      bindDn: "{{ keycloak_ldap_bind_dn }}"
+      bindCredential: "{{ keycloak_ldap_bind_credential }}"
+      usersDn: "{{ keycloak_ldap_users_dn }}"
+      usernameLDAPAttribute: "{{ keycloak_ldap_username_attribute }}"
+      rdnLDAPAttribute: "{{ keycloak_ldap_rdn_attribute }}"
+      uuidLDAPAttribute: "{{ keycloak_ldap_uuid_attribute }}"
+      userObjectClasses: "{{ keycloak_ldap_user_object_classes }}"
+      editMode: "{{ keycloak_ldap_edit_mode }}"
+      importEnabled: "{{ keycloak_ldap_import_enabled }}"
+      syncRegistrations: false
+      trustEmail: false
+      pagination: true
+      searchScope: "2"
+      fullSyncPeriod: "{{ keycloak_ldap_full_sync_period }}"
+      changedSyncPeriod: "{{ keycloak_ldap_changed_sync_period }}"
+      batchSizeForSync: 1000
+    mappers: "{{ keycloak_ldap_mappers }}"
+    state: present
+  when: keycloak_ldap_enabled | bool
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true

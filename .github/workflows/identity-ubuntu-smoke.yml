@@ -1,0 +1,54 @@
+name: Identity Ubuntu 24.04 VM Smoke
+
+# This job applies host security policy. Run only on an expendable hosted VM.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu-identity:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: ansible
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install controller and collections
+        run: |
+          python -m pip install -r requirements-controller.txt
+          ansible-galaxy collection install -r requirements.yml -p .collections
+      - name: Prepare ephemeral SSH identity
+        run: |
+          umask 077
+          mkdir -p .private
+          ssh-keygen -t ed25519 -N '' -f .private/smoke-key
+      - name: Preserve the hosted runner's preinstalled legacy Docker source
+        run: |
+          if [ -f /etc/apt/sources.list.d/docker.list ]; then
+            sudo mv /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/docker.list.smoke-backup
+          fi
+      - name: Deploy on the disposable Ubuntu VM
+        run: ansible-playbook -i tests/smoke-inventory.yml playbooks/site.yml
+      - name: Require the second deployment to be idempotent
+        env:
+          ANSIBLE_STDOUT_CALLBACK: ansible.posix.json
+        run: |
+          ansible-playbook -i tests/smoke-inventory.yml playbooks/site.yml > .private/second-run.json
+          jq -e '.stats | all(.changed == 0 and .failures == 0 and .unreachable == 0)' .private/second-run.json
+      - name: Verify services and real browser login protocol
+        run: |
+          ansible-playbook -i tests/smoke-inventory.yml playbooks/verify.yml
+          ansible-playbook -i tests/smoke-inventory.yml tests/smoke-user.yml
+          python tests/login_smoke.py
+      - name: Verify container restart recovery
+        run: |
+          sudo docker compose --project-directory /opt/keycloak restart
+          sudo docker compose --project-directory /opt/keycloak up --wait --wait-timeout 300
+          ansible-playbook -i tests/smoke-inventory.yml playbooks/verify.yml
+          python tests/login_smoke.py

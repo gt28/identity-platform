@@ -1,0 +1,50 @@
+---
+- name: Require an explicitly supported operating system
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_facts.distribution == 'Ubuntu' and ansible_facts.distribution_version == '24.04')
+        or (ansible_facts.os_family == 'RedHat' and ansible_facts.distribution_major_version | int == 9)
+    fail_msg: Supported hosts are Ubuntu Server 24.04 LTS and Enterprise Linux 9. Other releases require validation.
+
+- name: Require a non-root automation account and approved keys before hardening SSH
+  ansible.builtin.assert:
+    that:
+      - system_admin_user is match('^[a-z_][a-z0-9_-]*$')
+      - system_admin_user != 'root'
+      - system_admin_public_keys | length > 0
+      - system_admin_public_keys | select('match', '^(ssh-|ecdsa-)') | list | length == system_admin_public_keys | length
+    fail_msg: Provision a non-root sudo account and at least one approved SSH public key before running this role.
+
+- name: Require the automation account to exist
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ system_admin_user }}"
+
+- name: Detect existing UFW configuration on Ubuntu
+  ansible.builtin.stat:
+    path: /etc/ufw/ufw.conf
+  register: system_ufw_config
+  when: ansible_facts.distribution == 'Ubuntu'
+
+- name: Read existing UFW configuration on Ubuntu
+  ansible.builtin.slurp:
+    src: /etc/ufw/ufw.conf
+  register: system_ufw_content
+  when:
+    - ansible_facts.distribution == 'Ubuntu'
+    - system_ufw_config.stat.exists
+
+- name: Reject an enabled UFW configuration before installing firewalld
+  vars:
+    system_ufw_active_pattern: >-
+      (?im)^\s*ENABLED\s*=\s*["\x27]?yes\b
+  ansible.builtin.assert:
+    that:
+      - >-
+        (system_ufw_content.content | b64decode
+        | regex_search(system_ufw_active_pattern)) is none
+    fail_msg: UFW is enabled. Review and migrate the firewall policy in a maintenance window; this role will not disable UFW.
+  when:
+    - ansible_facts.distribution == 'Ubuntu'
+    - system_ufw_config.stat.exists

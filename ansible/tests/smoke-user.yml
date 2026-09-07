@@ -1,0 +1,42 @@
+---
+- name: Provision one disposable login identity for the Ubuntu smoke test
+  hosts: auth_servers
+  gather_facts: false
+  tasks:
+    - name: Refuse to create smoke users on other endpoints
+      ansible.builtin.assert:
+        that:
+          - keycloak_external_url == 'https://localhost'
+          - lookup('ansible.builtin.env', 'GITHUB_ACTIONS') == 'true'
+
+    - name: Generate a disposable password satisfying the company realm policy
+      ansible.builtin.copy:
+        content: >-
+          {{ lookup('ansible.builtin.password', '/dev/null length=40 chars=ascii_letters,digits') }}!Aa1
+        dest: "{{ inventory_dir }}/../.private/smoke-user-password"
+        force: false
+        mode: "0600"
+      no_log: true
+
+    - name: Create the disposable Keycloak user
+      community.general.keycloak_user:
+        auth_client_id: admin-cli
+        auth_keycloak_url: "{{ keycloak_external_url }}"
+        auth_realm: master
+        auth_username: "{{ keycloak_admin_user }}"
+        auth_password: "{{ keycloak_admin_password }}"
+        validate_certs: false
+        realm: "{{ keycloak_realm_name }}"
+        username: smoke-user
+        first_name: Smoke
+        last_name: User
+        email: smoke-user@example.test
+        email_verified: true
+        enabled: true
+        credentials:
+          - type: password
+            value: >-
+              {{ lookup('ansible.builtin.file', inventory_dir + '/../.private/smoke-user-password') | trim }}
+            temporary: false
+        state: present
+      no_log: true

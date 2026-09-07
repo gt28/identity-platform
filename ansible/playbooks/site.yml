@@ -1,0 +1,14 @@
+---
+- name: Configure enterprise authentication servers
+  hosts: auth_servers
+  gather_facts: true
+  become: true
+  roles:
+    - role: system_baseline
+      tags: [baseline]
+    - role: docker_engine
+      tags: [docker]
+    - role: keycloak
+      tags: [keycloak]
+    - role: identity_realm
+      tags: [realm]

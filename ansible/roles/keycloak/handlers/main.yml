@@ -1,0 +1,5 @@
+---
+- name: Restart Keycloak stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ keycloak_deploy_dir }}"
+    state: restarted

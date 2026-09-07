@@ -1,0 +1,73 @@
+---
+- name: Validate provided TLS file inputs
+  ansible.builtin.assert:
+    that:
+      - keycloak_tls_certificate_src | length > 0
+      - keycloak_tls_key_src | length > 0
+    fail_msg: Set keycloak_tls_certificate_src and keycloak_tls_key_src.
+  when: keycloak_tls_mode == 'provided'
+
+- name: Install the provided TLS certificate
+  ansible.builtin.copy:
+    src: "{{ keycloak_tls_certificate_src }}"
+    dest: "{{ keycloak_deploy_dir }}/tls/tls.crt"
+    owner: "{{ keycloak_container_uid }}"
+    group: "{{ keycloak_container_gid }}"
+    mode: "0644"
+  when: keycloak_tls_mode == 'provided'
+  notify: Restart Keycloak stack
+
+- name: Install the provided TLS private key
+  ansible.builtin.copy:
+    src: "{{ keycloak_tls_key_src }}"
+    dest: "{{ keycloak_deploy_dir }}/tls/tls.key"
+    owner: "{{ keycloak_container_uid }}"
+    group: "{{ keycloak_container_gid }}"
+    mode: "0600"
+  when: keycloak_tls_mode == 'provided'
+  no_log: true
+  notify: Restart Keycloak stack
+
+- name: Generate a private key for the lab certificate
+  community.crypto.openssl_privatekey:
+    path: "{{ keycloak_deploy_dir }}/tls/tls.key"
+    size: 3072
+    type: RSA
+    owner: "{{ keycloak_container_uid }}"
+    group: "{{ keycloak_container_gid }}"
+    mode: "0600"
+  when: keycloak_tls_mode == 'selfsigned'
+  notify: Restart Keycloak stack
+
+- name: Generate a certificate signing request for the lab certificate
+  community.crypto.openssl_csr:
+    path: "{{ keycloak_deploy_dir }}/tls/tls.csr"
+    privatekey_path: "{{ keycloak_deploy_dir }}/tls/tls.key"
+    common_name: "{{ keycloak_tls_common_name }}"
+    subject_alt_name: "{{ keycloak_tls_subject_alt_names }}"
+    basic_constraints:
+      - CA:FALSE
+    key_usage:
+      - digitalSignature
+      - keyEncipherment
+    extended_key_usage:
+      - serverAuth
+    owner: "{{ keycloak_container_uid }}"
+    group: "{{ keycloak_container_gid }}"
+    mode: "0644"
+  when: keycloak_tls_mode == 'selfsigned'
+  notify: Restart Keycloak stack
+
+- name: Generate the self-signed lab certificate
+  community.crypto.x509_certificate:
+    path: "{{ keycloak_deploy_dir }}/tls/tls.crt"
+    csr_path: "{{ keycloak_deploy_dir }}/tls/tls.csr"
+    privatekey_path: "{{ keycloak_deploy_dir }}/tls/tls.key"
+    provider: selfsigned
+    selfsigned_not_after: "+{{ keycloak_selfsigned_certificate_validity_days }}d"
+    ignore_timestamps: true
+    owner: "{{ keycloak_container_uid }}"
+    group: "{{ keycloak_container_gid }}"
+    mode: "0644"
+  when: keycloak_tls_mode == 'selfsigned'
+  notify: Restart Keycloak stack

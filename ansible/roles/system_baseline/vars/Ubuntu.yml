@@ -1,0 +1,21 @@
+---
+ssh_service: ssh
+services: [apparmor, chrony, firewalld, rsyslog]
+packages:
+  - apparmor
+  - apparmor-utils
+  - auditd
+  - ca-certificates
+  - chrony
+  - curl
+  - firewalld
+  - openssh-server
+  - openssl
+  - python3-apt
+  - python3-cryptography
+  - python3-dbus
+  - python3-firewall
+  - rsyslog
+  - sudo
+  - tar
+  - unzip

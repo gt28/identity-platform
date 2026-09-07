@@ -1,0 +1,9 @@
+{
+  "live-restore": true,
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-file": "{{ docker_log_max_files }}",
+    "max-size": "{{ docker_log_max_size }}"
+  },
+  "userland-proxy": false
+}

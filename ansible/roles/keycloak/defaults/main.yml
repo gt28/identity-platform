@@ -1,0 +1,39 @@
+---
+keycloak_deploy_dir: /opt/keycloak
+keycloak_image_repository: quay.io/keycloak/keycloak
+keycloak_image_tag: 26.7.2
+keycloak_local_image: "local/keycloak:{{ keycloak_image_tag }}"
+keycloak_manage_postgres: true
+keycloak_postgres_image: postgres:16-alpine
+keycloak_db_name: keycloak
+keycloak_db_username: keycloak
+keycloak_db_password: ""
+keycloak_db_url: "jdbc:postgresql://postgres:5432/{{ keycloak_db_name }}"
+keycloak_db_tls_mode: disabled
+keycloak_admin_user: admin
+keycloak_admin_password: ""
+keycloak_external_host: auth.example.com
+keycloak_external_port: 443
+keycloak_external_url: "https://{{ keycloak_external_host }}"
+keycloak_log_level: info
+keycloak_db_pool_initial_size: 5
+keycloak_db_pool_min_size: 5
+keycloak_db_pool_max_size: 20
+keycloak_http_max_queued_requests: 1000
+keycloak_cache: local
+keycloak_container_uid: 1000
+keycloak_container_gid: 0
+keycloak_memory_limit: 3g
+keycloak_cpu_limit: 2.0
+keycloak_postgres_memory_limit: 1g
+keycloak_postgres_cpu_limit: 1.0
+
+keycloak_tls_mode: provided
+keycloak_tls_common_name: "{{ keycloak_external_host }}"
+keycloak_tls_subject_alt_names:
+  - "DNS:{{ keycloak_external_host }}"
+keycloak_tls_certificate_src: ""
+keycloak_tls_key_src: ""
+keycloak_tls_fetch_path: ""
+keycloak_selfsigned_certificate_validity_days: 365
+keycloak_trust_ca_files: []

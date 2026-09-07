@@ -1,0 +1,54 @@
+---
+- name: Remove conflicting Enterprise Linux Docker packages
+  ansible.builtin.dnf:
+    name:
+      - docker
+      - docker-client
+      - docker-client-latest
+      - docker-common
+      - docker-engine
+      - docker-latest
+      - docker-latest-logrotate
+      - docker-logrotate
+      - podman-docker
+    state: absent
+
+- name: Install RPM repository tooling
+  ansible.builtin.dnf:
+    name:
+      - dnf-plugins-core
+      - container-selinux
+      - python3-requests
+    state: present
+
+- name: Download the Docker RPM repository signing key
+  ansible.builtin.get_url:
+    url: "{{ docker_gpg_key_url }}"
+    dest: /etc/pki/rpm-gpg/docker-ce.asc
+    owner: root
+    group: root
+    mode: "0644"
+  register: docker_engine_gpg_key_download
+  retries: 4
+  delay: 5
+  until: docker_engine_gpg_key_download is succeeded
+
+- name: Trust the Docker RPM repository signing key
+  ansible.builtin.rpm_key:
+    key: /etc/pki/rpm-gpg/docker-ce.asc
+    fingerprint: "{{ docker_gpg_fingerprint }}"
+    state: present
+
+- name: Install the Docker CE RPM repository definition
+  ansible.builtin.template:
+    src: docker-ce.repo.j2
+    dest: /etc/yum.repos.d/docker-ce.repo
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install Docker Engine and Compose RPM packages
+  ansible.builtin.dnf:
+    name: "{{ docker_packages }}"
+    state: present
+    update_cache: true

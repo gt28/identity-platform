@@ -1,0 +1,271 @@
+---
+- name: Validate demo company inputs
+  ansible.builtin.assert:
+    that:
+      - keycloak_demo_company_users | length == keycloak_demo_company_expected_size | int
+      - >-
+        keycloak_demo_company_users
+        | selectattr('username', 'equalto', keycloak_demo_company_admin_username)
+        | list | length == 1
+      - >-
+        keycloak_demo_company_users
+        | selectattr('vmp_role', 'equalto', 'Super Admin')
+        | list | length == 1
+    fail_msg: Demo company users must have the expected size and exactly one Super Admin.
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Configure the Keycloak user profile
+  ansible.builtin.include_tasks: user_profile.yml
+
+- name: Create the local demo password directory
+  ansible.builtin.file:
+    path: "{{ keycloak_demo_company_password_dir }}"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Create independent initial passwords for demo users
+  ansible.builtin.copy:
+    content: >-
+      {{ lookup('ansible.builtin.password', '/dev/null length=20 chars=ascii_letters,digits') }}!Aa1
+    dest: "{{ keycloak_demo_company_password_dir }}/{{ item.username }}"
+    force: false
+    mode: "0600"
+  loop: "{{ keycloak_demo_company_users }}"
+  loop_control:
+    label: "{{ item.username }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Create the company group
+  community.general.keycloak_group:
+    auth_client_id: admin-cli
+    auth_keycloak_url: "{{ keycloak_external_url }}"
+    auth_realm: master
+    auth_username: "{{ keycloak_admin_user }}"
+    auth_password: "{{ keycloak_admin_password }}"
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    realm: "{{ keycloak_realm_name }}"
+    name: Company
+    attributes:
+      organization_id: "{{ keycloak_demo_company_organization_id }}"
+    state: present
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Create company department groups
+  community.general.keycloak_group:
+    auth_client_id: admin-cli
+    auth_keycloak_url: "{{ keycloak_external_url }}"
+    auth_realm: master
+    auth_username: "{{ keycloak_admin_user }}"
+    auth_password: "{{ keycloak_admin_password }}"
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    realm: "{{ keycloak_realm_name }}"
+    name: "{{ item }}"
+    parents:
+      - name: Company
+    attributes:
+      department: "{{ item }}"
+      organization_id: "{{ keycloak_demo_company_organization_id }}"
+    state: present
+  loop: "{{ keycloak_demo_company_users | map(attribute='department') | unique | sort }}"
+  loop_control:
+    label: "{{ item }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Obtain a Keycloak administration token for full user queries
+  ansible.builtin.uri:
+    url: "{{ keycloak_external_url }}/realms/master/protocol/openid-connect/token"
+    method: POST
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    body_format: form-urlencoded
+    body:
+      grant_type: password
+      client_id: admin-cli
+      username: "{{ keycloak_admin_user }}"
+      password: "{{ keycloak_admin_password }}"
+    status_code: 200
+    return_content: true
+  register: keycloak_demo_company_admin_token
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Read complete existing demo user representations
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_external_url
+      ~ '/admin/realms/' ~ keycloak_realm_name
+      ~ '/users?username=' ~ (item.username | urlencode)
+      ~ '&exact=true&briefRepresentation=false' }}
+    method: GET
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    headers:
+      Authorization: "Bearer {{ keycloak_demo_company_admin_token.json.access_token }}"
+      Accept: application/json
+    status_code: 200
+    return_content: true
+  loop: "{{ keycloak_demo_company_users }}"
+  loop_control:
+    label: "{{ item.username }}"
+  register: keycloak_demo_company_existing_users
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Create or update drifted demo company users
+  community.general.keycloak_user:
+    auth_client_id: admin-cli
+    auth_keycloak_url: "{{ keycloak_external_url }}"
+    auth_realm: master
+    auth_username: "{{ keycloak_admin_user }}"
+    auth_password: "{{ keycloak_admin_password }}"
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    realm: "{{ keycloak_realm_name }}"
+    username: "{{ item.item.username }}"
+    first_name: "{{ item.item.first_name }}"
+    last_name: "{{ item.item.last_name }}"
+    email: "{{ item.item.username }}@{{ keycloak_demo_company_email_domain }}"
+    email_verified: true
+    enabled: true
+    credentials:
+      - type: password
+        value: >-
+          {{ lookup('ansible.builtin.file', keycloak_demo_company_password_dir + '/' + item.item.username) | trim }}
+        temporary: "{{ keycloak_demo_company_password_temporary }}"
+    attributes:
+      - name: organization_id
+        values:
+          - "{{ keycloak_demo_company_organization_id }}"
+      - name: department
+        values:
+          - "{{ item.item.department }}"
+      - name: job_title
+        values:
+          - "{{ item.item.job_title }}"
+    state: present
+    force: false
+  loop: "{{ keycloak_demo_company_existing_users.results }}"
+  loop_control:
+    label: "{{ item.item.username }}"
+  vars:
+    current_user: "{{ item.json | first | default({}) }}"
+  when: >-
+    item.json | length == 0
+    or not (current_user.enabled | default(false) | bool)
+    or not (current_user.emailVerified | default(false) | bool)
+    or current_user.firstName | default('') != item.item.first_name
+    or current_user.lastName | default('') != item.item.last_name
+    or current_user.email | default('') != item.item.username + '@' + keycloak_demo_company_email_domain
+    or (current_user.attributes | default({})).organization_id | default([]) != [keycloak_demo_company_organization_id]
+    or (current_user.attributes | default({})).department | default([]) != [item.item.department]
+    or (current_user.attributes | default({})).job_title | default([]) != [item.item.job_title]
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Reconcile demo company group membership
+  community.general.keycloak_user:
+    auth_client_id: admin-cli
+    auth_keycloak_url: "{{ keycloak_external_url }}"
+    auth_realm: master
+    auth_username: "{{ keycloak_admin_user }}"
+    auth_password: "{{ keycloak_admin_password }}"
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    realm: "{{ keycloak_realm_name }}"
+    username: "{{ item.username }}"
+    groups:
+      - name: "/Company/{{ item.department }}"
+        state: present
+    email_verified_behavior: no_defaults
+    state: present
+    force: false
+  loop: "{{ keycloak_demo_company_users }}"
+  loop_control:
+    label: "{{ item.username }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Refresh the Keycloak administration token for manifest export
+  ansible.builtin.uri:
+    url: "{{ keycloak_external_url }}/realms/master/protocol/openid-connect/token"
+    method: POST
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    body_format: form-urlencoded
+    body:
+      grant_type: password
+      client_id: admin-cli
+      username: "{{ keycloak_admin_user }}"
+      password: "{{ keycloak_admin_password }}"
+    status_code: 200
+    return_content: true
+  register: keycloak_demo_company_manifest_token
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Read final complete demo user representations
+  ansible.builtin.uri:
+    url: >-
+      {{ keycloak_external_url
+      ~ '/admin/realms/' ~ keycloak_realm_name
+      ~ '/users?username=' ~ (item.username | urlencode)
+      ~ '&exact=true&briefRepresentation=false' }}
+    method: GET
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    headers:
+      Authorization: "Bearer {{ keycloak_demo_company_manifest_token.json.access_token }}"
+      Accept: application/json
+    status_code: 200
+    return_content: true
+  loop: "{{ keycloak_demo_company_users }}"
+  loop_control:
+    label: "{{ item.username }}"
+  register: keycloak_demo_company_final_users
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true
+
+- name: Require one final Keycloak identity for every demo user
+  ansible.builtin.assert:
+    that:
+      - item.json | length == 1
+      - >-
+        (item.json[0].attributes | default({})).organization_id | default([])
+        == [keycloak_demo_company_organization_id]
+    fail_msg: "Keycloak user {{ item.item.username }} was not fully provisioned."
+    quiet: true
+  loop: "{{ keycloak_demo_company_final_users.results }}"
+  loop_control:
+    label: "{{ item.item.username }}"
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Export the VMP identity projection manifest
+  ansible.builtin.template:
+    src: demo_company_identities.json.j2
+    dest: "{{ keycloak_demo_company_manifest_path }}"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  run_once: true

@@ -1,0 +1,59 @@
+---
+keycloak_demo_company_name: Northstar Technology
+keycloak_demo_company_slug: northstar-technology
+keycloak_demo_company_organization_id: northstar-tech
+keycloak_demo_company_email_domain: northstar.example
+keycloak_demo_company_admin_username: vmp.admin
+keycloak_demo_company_expected_size: 50
+
+keycloak_demo_company_users:
+  - { username: vmp.admin, first_name: Morgan, last_name: Reed, department: Executive, job_title: Chief Information Security Officer, vmp_role: Super Admin }
+  - { username: security01, first_name: Avery, last_name: Chen, department: Security, job_title: Security Operations Lead, vmp_role: Security Analyst }
+  - { username: security02, first_name: Jordan, last_name: Patel, department: Security, job_title: Senior Security Analyst, vmp_role: Security Analyst }
+  - { username: security03, first_name: Riley, last_name: Kim, department: Security, job_title: Vulnerability Analyst, vmp_role: Security Analyst }
+  - { username: security04, first_name: Cameron, last_name: Diaz, department: Security, job_title: Cloud Security Analyst, vmp_role: Security Analyst }
+  - { username: security05, first_name: Taylor, last_name: Brooks, department: Security, job_title: Application Security Engineer, vmp_role: Security Analyst }
+  - { username: security06, first_name: Quinn, last_name: Evans, department: Security, job_title: Threat Intelligence Analyst, vmp_role: Security Analyst }
+  - { username: security07, first_name: Casey, last_name: Singh, department: Security, job_title: Security Analyst, vmp_role: Security Analyst }
+  - { username: it01, first_name: Parker, last_name: Lewis, department: IT, job_title: IT Operations Manager, vmp_role: Asset Owner }
+  - { username: it02, first_name: Skyler, last_name: Hall, department: IT, job_title: Systems Administrator, vmp_role: Asset Owner }
+  - { username: it03, first_name: Rowan, last_name: Clark, department: IT, job_title: Network Engineer, vmp_role: Asset Owner }
+  - { username: it04, first_name: Reese, last_name: Young, department: IT, job_title: Cloud Platform Engineer, vmp_role: Asset Owner }
+  - { username: it05, first_name: Hayden, last_name: Allen, department: IT, job_title: Endpoint Administrator, vmp_role: Asset Owner }
+  - { username: it06, first_name: Emerson, last_name: King, department: IT, job_title: Database Administrator, vmp_role: Asset Owner }
+  - { username: eng01, first_name: Alex, last_name: Rivera, department: Engineering, job_title: Engineering Manager, vmp_role: Developer }
+  - { username: eng02, first_name: Jamie, last_name: Scott, department: Engineering, job_title: Staff Software Engineer, vmp_role: Developer }
+  - { username: eng03, first_name: Drew, last_name: Green, department: Engineering, job_title: Backend Engineer, vmp_role: Developer }
+  - { username: eng04, first_name: Robin, last_name: Baker, department: Engineering, job_title: Frontend Engineer, vmp_role: Developer }
+  - { username: eng05, first_name: Jesse, last_name: Adams, department: Engineering, job_title: Platform Engineer, vmp_role: Developer }
+  - { username: eng06, first_name: Dakota, last_name: Nelson, department: Engineering, job_title: Site Reliability Engineer, vmp_role: Developer }
+  - { username: eng07, first_name: Sidney, last_name: Carter, department: Engineering, job_title: Mobile Engineer, vmp_role: Developer }
+  - { username: eng08, first_name: Finley, last_name: Mitchell, department: Engineering, job_title: Quality Engineer, vmp_role: Developer }
+  - { username: eng09, first_name: Marley, last_name: Perez, department: Engineering, job_title: Data Engineer, vmp_role: Developer }
+  - { username: eng10, first_name: Ari, last_name: Roberts, department: Engineering, job_title: Machine Learning Engineer, vmp_role: Developer }
+  - { username: eng11, first_name: Blake, last_name: Turner, department: Engineering, job_title: DevOps Engineer, vmp_role: Developer }
+  - { username: eng12, first_name: Sam, last_name: Phillips, department: Engineering, job_title: Software Engineer, vmp_role: Developer }
+  - { username: product01, first_name: Kai, last_name: Campbell, department: Product, job_title: Head of Product, vmp_role: Project Manager }
+  - { username: product02, first_name: Noel, last_name: Parker, department: Product, job_title: Senior Product Manager, vmp_role: Project Manager }
+  - { username: product03, first_name: Lane, last_name: Edwards, department: Product, job_title: Product Manager, vmp_role: Project Manager }
+  - { username: product04, first_name: Ellis, last_name: Collins, department: Product, job_title: Product Designer, vmp_role: Project Manager }
+  - { username: product05, first_name: Sage, last_name: Stewart, department: Product, job_title: Product Operations Specialist, vmp_role: Project Manager }
+  - { username: finance01, first_name: Devon, last_name: Sanchez, department: Finance, job_title: Finance Director, vmp_role: Viewer }
+  - { username: finance02, first_name: Frankie, last_name: Morris, department: Finance, job_title: Financial Controller, vmp_role: Viewer }
+  - { username: finance03, first_name: Micah, last_name: Rogers, department: Finance, job_title: Financial Analyst, vmp_role: Viewer }
+  - { username: finance04, first_name: Arden, last_name: Reed, department: Finance, job_title: Accountant, vmp_role: Viewer }
+  - { username: hr01, first_name: Remy, last_name: Cook, department: Human Resources, job_title: People Director, vmp_role: Viewer }
+  - { username: hr02, first_name: Shiloh, last_name: Morgan, department: Human Resources, job_title: HR Business Partner, vmp_role: Viewer }
+  - { username: hr03, first_name: Rory, last_name: Bell, department: Human Resources, job_title: Talent Acquisition Specialist, vmp_role: Viewer }
+  - { username: hr04, first_name: Phoenix, last_name: Murphy, department: Human Resources, job_title: People Operations Specialist, vmp_role: Viewer }
+  - { username: sales01, first_name: Kendall, last_name: Bailey, department: Sales, job_title: Sales Director, vmp_role: Viewer }
+  - { username: sales02, first_name: Jules, last_name: Cooper, department: Sales, job_title: Account Executive, vmp_role: Viewer }
+  - { username: sales03, first_name: Teagan, last_name: Richardson, department: Sales, job_title: Account Executive, vmp_role: Viewer }
+  - { username: sales04, first_name: River, last_name: Cox, department: Sales, job_title: Sales Engineer, vmp_role: Viewer }
+  - { username: sales05, first_name: Lennox, last_name: Howard, department: Sales, job_title: Customer Success Manager, vmp_role: Viewer }
+  - { username: ops01, first_name: Charlie, last_name: Ward, department: Operations, job_title: Operations Director, vmp_role: Project Manager }
+  - { username: ops02, first_name: Ashton, last_name: Torres, department: Operations, job_title: Program Manager, vmp_role: Project Manager }
+  - { username: ops03, first_name: Elliot, last_name: Peterson, department: Operations, job_title: Procurement Manager, vmp_role: Viewer }
+  - { username: ops04, first_name: Marlowe, last_name: Gray, department: Operations, job_title: Business Operations Analyst, vmp_role: Viewer }
+  - { username: ops05, first_name: Justice, last_name: Ramirez, department: Operations, job_title: Facilities Coordinator, vmp_role: Viewer }
+  - { username: ops06, first_name: Milan, last_name: James, department: Operations, job_title: Operations Specialist, vmp_role: Viewer }

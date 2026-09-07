@@ -1,0 +1,122 @@
+name: keycloak
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 20m
+    max-file: "5"
+
+services:
+{% if keycloak_manage_postgres | bool %}
+  postgres:
+    image: {{ keycloak_postgres_image }}
+    environment:
+      POSTGRES_DB: {{ keycloak_db_name }}
+      POSTGRES_USER: {{ keycloak_db_username }}
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+    env_file:
+      - .env
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U {{ keycloak_db_username }} -d {{ keycloak_db_name }}
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 60s
+    shm_size: 256m
+    mem_limit: {{ keycloak_postgres_memory_limit }}
+    cpus: {{ keycloak_postgres_cpu_limit }}
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    networks:
+      - backend
+{% endif %}
+
+  keycloak:
+    image: {{ keycloak_local_image }}
+    command:
+      - start
+      - --optimized
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB: postgres
+      KC_DB_URL: {{ keycloak_db_url }}
+      KC_DB_USERNAME: {{ keycloak_db_username }}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_DB_TLS_MODE: {{ keycloak_db_tls_mode }}
+      KC_DB_POOL_INITIAL_SIZE: "{{ keycloak_db_pool_initial_size }}"
+      KC_DB_POOL_MIN_SIZE: "{{ keycloak_db_pool_min_size }}"
+      KC_DB_POOL_MAX_SIZE: "{{ keycloak_db_pool_max_size }}"
+      KC_HOSTNAME: {{ keycloak_external_url }}
+      KC_HOSTNAME_STRICT: "true"
+      KC_HTTP_ENABLED: "false"
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/conf/tls/tls.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/conf/tls/tls.key
+      KC_HTTPS_CERTIFICATES_RELOAD_PERIOD: 1h
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_HTTP_MANAGEMENT_SCHEME: http
+      KC_CACHE: {{ keycloak_cache }}
+      KC_LOG_LEVEL: {{ keycloak_log_level }}
+      KC_HTTP_MAX_QUEUED_REQUESTS: "{{ keycloak_http_max_queued_requests }}"
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/conf/truststores
+      KC_TLS_HOSTNAME_VERIFIER: DEFAULT
+    env_file:
+      - .env
+    ports:
+      - "443:8443"
+    volumes:
+      - ./tls:/opt/keycloak/conf/tls:ro{{ ',Z' if ansible_facts.os_family == 'RedHat' else '' }}
+      - ./truststores:/opt/keycloak/conf/truststores:ro{{ ',Z' if ansible_facts.os_family == 'RedHat' else '' }}
+      - keycloak-data:/opt/keycloak/data
+{% if keycloak_manage_postgres | bool %}
+    depends_on:
+      postgres:
+        condition: service_healthy
+{% endif %}
+    healthcheck:
+      test:
+        - CMD
+        - /bin/bash
+        - -c
+        - >-
+          { printf 'HEAD /health/ready HTTP/1.0\r\n\r\n' >&0;
+          grep 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/9000
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+    stop_grace_period: 60s
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /opt/keycloak/data/tmp:size=64m,mode=1777,uid=1000,gid=0
+    mem_limit: {{ keycloak_memory_limit }}
+    cpus: {{ keycloak_cpu_limit }}
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    networks:
+      - backend
+      - edge
+
+volumes:
+  keycloak-data:
+{% if keycloak_manage_postgres | bool %}
+  postgres-data:
+{% endif %}
+
+networks:
+  backend:
+    internal: true
+  edge:

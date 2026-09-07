@@ -1,0 +1,21 @@
+---
+- name: Create or update the declarative user profile
+  community.general.keycloak_userprofile:
+    auth_client_id: admin-cli
+    auth_keycloak_url: "{{ keycloak_external_url }}"
+    auth_realm: master
+    auth_username: "{{ keycloak_admin_user }}"
+    auth_password: "{{ keycloak_admin_password }}"
+    validate_certs: "{{ keycloak_realm_validate_certs }}"
+    parent_id: "{{ keycloak_realm_name }}"
+    provider_id: declarative-user-profile
+    provider_type: org.keycloak.userprofile.UserProfileProvider
+    config:
+      kc_user_profile_config:
+        - attributes: "{{ keycloak_user_profile_attributes }}"
+    state: present
+  when: keycloak_user_profile_enabled | bool
+  delegate_to: localhost
+  become: false
+  run_once: true
+  no_log: true

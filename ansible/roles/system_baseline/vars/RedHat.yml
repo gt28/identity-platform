@@ -1,0 +1,18 @@
+---
+ssh_service: sshd
+services: [chronyd, firewalld, rsyslog]
+packages:
+  - audit
+  - ca-certificates
+  - chrony
+  - curl
+  - firewalld
+  - openssh-server
+  - openssl
+  - policycoreutils-python-utils
+  - python3-cryptography
+  - python3-libselinux
+  - rsyslog
+  - sudo
+  - tar
+  - unzip

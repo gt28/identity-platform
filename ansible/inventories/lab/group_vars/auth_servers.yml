@@ -1,0 +1,87 @@
+---
+system_hostname: auth-lab
+system_timezone: Asia/Shanghai
+system_update_packages: true
+system_reboot_after_update: true
+system_admin_user: ansible
+system_admin_public_keys:
+  - "{{ lookup('ansible.builtin.file', lookup('ansible.builtin.env', 'HOME') + '/.ssh/id_ed25519.pub') }}"
+system_firewall_services:
+  - ssh
+  - https
+
+docker_users: []
+docker_repository_base_url: https://mirrors.huaweicloud.com/docker-ce/linux/centos
+docker_gpg_key_url: https://mirrors.huaweicloud.com/docker-ce/linux/centos/gpg
+
+keycloak_external_host: 192.168.2.144
+keycloak_external_port: 8443
+keycloak_external_url: "https://{{ keycloak_external_host }}:{{ keycloak_external_port }}"
+keycloak_tls_mode: selfsigned
+keycloak_tls_common_name: "{{ keycloak_external_host }}"
+keycloak_tls_subject_alt_names:
+  - "IP:{{ keycloak_external_host }}"
+  - "DNS:{{ system_hostname }}"
+keycloak_tls_fetch_path: "{{ inventory_dir }}/../../.private/auth-lab.crt"
+
+keycloak_admin_user: admin
+keycloak_admin_password: >-
+  {{ lookup('ansible.builtin.password',
+  inventory_dir + '/../../.private/keycloak_admin_password'
+  + ' length=40 chars=ascii_letters,digits') }}
+keycloak_db_password: >-
+  {{ lookup('ansible.builtin.password',
+  inventory_dir + '/../../.private/keycloak_db_password'
+  + ' length=48 chars=ascii_letters,digits') }}
+keycloak_cache: local
+keycloak_image_repository: m.daocloud.io/quay.io/keycloak/keycloak
+keycloak_postgres_image: m.daocloud.io/docker.io/library/postgres:16-alpine
+
+keycloak_realm_name: company
+keycloak_realm_display_name: Company SSO Lab
+keycloak_realm_validate_certs: false
+keycloak_oidc_clients:
+  - client_id: vmp-spa
+    name: VMP browser client
+    owner: VMP team
+    environment: lab
+    description: Public Authorization Code client with S256 PKCE for VMP.
+    public_client: true
+    redirect_uris:
+      - http://127.0.0.1:3000/auth/callback
+      - http://localhost:3000/auth/callback
+    web_origins:
+      - http://127.0.0.1:3000
+      - http://localhost:3000
+    post_logout_redirect_uris:
+      - http://127.0.0.1:3000/*
+      - http://localhost:3000/*
+    attributes:
+      pkce.code.challenge.method: S256
+    protocol_mappers:
+      - name: vmp-api-audience
+        protocol: openid-connect
+        protocolMapper: oidc-audience-mapper
+        consentRequired: false
+        config:
+          included.client.audience: vmp-api
+          id.token.claim: "false"
+          access.token.claim: "true"
+          introspection.token.claim: "true"
+      - name: organization-id
+        protocol: openid-connect
+        protocolMapper: oidc-usermodel-attribute-mapper
+        consentRequired: false
+        config:
+          user.attribute: organization_id
+          claim.name: organization_id
+          jsonType.label: String
+          multivalued: "false"
+          aggregate.attrs: "false"
+          id.token.claim: "true"
+          access.token.claim: "true"
+          userinfo.token.claim: "true"
+          introspection.token.claim: "true"
+
+# Enable this only after an LDAPS/StartTLS directory and bind account exist.
+keycloak_ldap_enabled: false

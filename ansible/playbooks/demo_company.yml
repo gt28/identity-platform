@@ -1,0 +1,12 @@
+---
+- name: Provision a simulated company in Keycloak
+  hosts: auth_servers
+  gather_facts: false
+  become: false
+  vars_files:
+    - ../vars/demo_company.yml
+  tasks:
+    - name: Provision demo company identities
+      ansible.builtin.include_role:
+        name: identity_realm
+        tasks_from: demo_company

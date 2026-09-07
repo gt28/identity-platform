@@ -1,0 +1,92 @@
+---
+- name: Verify authentication servers
+  hosts: auth_servers
+  gather_facts: true
+  become: true
+  vars:
+    keycloak_verify_deploy_dir: "{{ keycloak_deploy_dir | default('/opt/keycloak') }}"
+    keycloak_verify_manage_postgres: "{{ keycloak_manage_postgres | default(true) }}"
+  tasks:
+    - name: Read Ubuntu service states
+      ansible.builtin.service_facts:
+      when: ansible_facts.distribution == 'Ubuntu'
+
+    - name: Verify Ubuntu security and time services
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services[item].state == 'running'
+      loop: [ssh.service, chrony.service, firewalld.service, apparmor.service]
+      when: ansible_facts.distribution == 'Ubuntu'
+
+    - name: Verify Ubuntu AppArmor is available to the kernel
+      ansible.builtin.command: aa-enabled
+      changed_when: false
+      when: ansible_facts.distribution == 'Ubuntu'
+
+    - name: Verify the Docker Compose plugin
+      ansible.builtin.command: docker compose version --short
+      changed_when: false
+      register: keycloak_verify_compose_version
+
+    - name: Require a supported Docker Compose version
+      ansible.builtin.assert:
+        that:
+          - keycloak_verify_compose_version.stdout | trim | regex_replace('^v', '') is version('2.18.0', '>=')
+
+    - name: Read Keycloak master realm discovery document
+      ansible.builtin.uri:
+        url: https://127.0.0.1/realms/master/.well-known/openid-configuration
+        method: GET
+        validate_certs: false
+        status_code: 200
+        return_content: true
+      register: keycloak_master_discovery
+
+    - name: Validate configured realm issuer
+      ansible.builtin.assert:
+        that:
+          - keycloak_master_discovery.json.issuer == keycloak_external_url + '/realms/master'
+
+    - name: Read enterprise realm discovery document
+      ansible.builtin.uri:
+        url: "https://127.0.0.1/realms/{{ keycloak_realm_name }}/.well-known/openid-configuration"
+        method: GET
+        validate_certs: false
+        status_code: 200
+        return_content: true
+      register: keycloak_enterprise_discovery
+
+    - name: Validate enterprise realm issuer and authorization endpoint
+      ansible.builtin.assert:
+        that:
+          - keycloak_enterprise_discovery.json.issuer == keycloak_external_url + '/realms/' + keycloak_realm_name
+          - keycloak_enterprise_discovery.json.authorization_endpoint is match('^https://')
+
+    - name: Inspect running Compose services
+      ansible.builtin.command:
+        argv:
+          - docker
+          - compose
+          - ps
+          - --all
+          - --format
+          - json
+      args:
+        chdir: "{{ keycloak_verify_deploy_dir }}"
+      changed_when: false
+      register: keycloak_compose_ps
+
+    - name: Parse Compose service status as structured data
+      ansible.builtin.set_fact:
+        keycloak_verify_services: >-
+          {{ (keycloak_compose_ps.stdout | from_json) if keycloak_compose_ps.stdout.lstrip().startswith('[')
+          else (keycloak_compose_ps.stdout_lines | reject('equalto', '') | map('from_json') | list) }}
+
+    - name: Require expected Compose services to be healthy and running
+      ansible.builtin.assert:
+        that:
+          - keycloak_verify_services | selectattr('Service', 'equalto', item) | list | length == 1
+          - >-
+            keycloak_verify_services | selectattr('Service', 'equalto', item)
+            | selectattr('State', 'equalto', 'running') | selectattr('Health', 'equalto', 'healthy') | list | length == 1
+      loop: "{{ ['keycloak', 'postgres'] if keycloak_verify_manage_postgres | bool else ['keycloak'] }}"

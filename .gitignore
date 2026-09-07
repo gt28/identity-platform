@@ -1,0 +1,39 @@
+# Secrets and local controller state
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.csr
+ansible/.private/
+ansible/.collections/
+ansible/.cache/
+
+# Active inventories are operator-owned; only examples and the demo lab are public.
+ansible/inventories/production/hosts.yml
+ansible/inventories/production/group_vars/auth_servers.yml
+ansible/inventories/production/group_vars/all/
+ansible/inventories/ubuntu/hosts.yml
+ansible/inventories/ubuntu/group_vars/auth_servers.yml
+ansible/inventories/ubuntu/group_vars/all/
+
+# Dependencies and generated artifacts
+.venv/
+.venv-ansible/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+*.retry
+*.log
+*.iso
+*.vdi
+*.vmdk
+backups/
+.DS_Store
+.idea/
+.vscode/

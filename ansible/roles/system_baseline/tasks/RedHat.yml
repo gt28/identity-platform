@@ -1,0 +1,26 @@
+---
+- name: Update installed Enterprise Linux packages
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+    update_only: true
+  register: system_package_update
+  when: system_update_packages | bool
+
+- name: Reboot Enterprise Linux after an approved package update
+  ansible.builtin.reboot:
+    msg: Reboot initiated by the system_baseline Ansible role
+    reboot_timeout: 900
+  when:
+    - system_reboot_after_update | bool
+    - system_package_update is changed
+
+- name: Install Enterprise Linux baseline packages
+  ansible.builtin.dnf:
+    name: "{{ system_packages }}"
+    state: present
+
+- name: Enforce SELinux on Enterprise Linux
+  ansible.posix.selinux:
+    policy: targeted
+    state: enforcing

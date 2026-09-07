@@ -1,0 +1,148 @@
+---
+keycloak_realm_name: company
+keycloak_realm_display_name: Company SSO
+keycloak_realm_validate_certs: true
+keycloak_realm_ssl_required: all
+keycloak_realm_verify_email: false
+keycloak_realm_password_policy: >-
+  length(14) and digits(1) and lowerCase(1) and upperCase(1)
+  and specialChars(1) and notUsername(undefined)
+keycloak_realm_access_token_lifespan: 300
+keycloak_realm_sso_idle_timeout: 1800
+keycloak_realm_sso_max_lifespan: 28800
+
+keycloak_user_profile_enabled: true
+keycloak_user_profile_attributes:
+  - name: username
+    display_name: Username
+    validations:
+      length:
+        min: 3
+        max: 255
+      username_prohibited_characters: {}
+      up_username_not_idn_homograph: {}
+    permissions:
+      view: [admin, user]
+      edit: [admin]
+    multivalued: false
+  - name: email
+    display_name: Email
+    validations:
+      email: {}
+      length:
+        max: 320
+    permissions:
+      view: [admin, user]
+      edit: [admin]
+    multivalued: false
+  - name: firstName
+    display_name: First name
+    validations:
+      length:
+        max: 255
+      person_name_prohibited_characters: {}
+    permissions:
+      view: [admin, user]
+      edit: [admin]
+    multivalued: false
+  - name: lastName
+    display_name: Last name
+    validations:
+      length:
+        max: 255
+      person_name_prohibited_characters: {}
+    permissions:
+      view: [admin, user]
+      edit: [admin]
+    multivalued: false
+  - name: organization_id
+    display_name: Organization ID
+    validations:
+      length:
+        min: 1
+        max: 255
+    permissions:
+      view: [admin]
+      edit: [admin]
+    multivalued: false
+  - name: department
+    display_name: Department
+    validations:
+      length:
+        max: 200
+    permissions:
+      view: [admin, user]
+      edit: [admin]
+    multivalued: false
+  - name: job_title
+    display_name: Job title
+    validations:
+      length:
+        max: 200
+    permissions:
+      view: [admin, user]
+      edit: [admin]
+    multivalued: false
+
+# Every relying system receives its own client registration. Application roles
+# stay in the application; this registry contains authentication protocol data.
+keycloak_oidc_clients: []
+
+keycloak_demo_company_name: Example Company
+keycloak_demo_company_slug: example-company
+keycloak_demo_company_organization_id: example-company
+keycloak_demo_company_email_domain: example.test
+keycloak_demo_company_admin_username: vmp.admin
+keycloak_demo_company_users: []
+keycloak_demo_company_expected_size: 50
+keycloak_demo_company_password_temporary: false
+keycloak_demo_company_password_dir: >-
+  {{ inventory_dir }}/../../.private/demo-company-passwords
+keycloak_demo_company_manifest_path: >-
+  {{ inventory_dir }}/../../.private/demo-company-identities.json
+
+keycloak_ldap_enabled: false
+keycloak_ldap_name: corporate-ldap
+keycloak_ldap_vendor: other
+keycloak_ldap_connection_url: ""
+keycloak_ldap_start_tls: false
+keycloak_ldap_bind_dn: ""
+keycloak_ldap_bind_credential: ""
+keycloak_ldap_bind_credential_update_mode: only_indirect
+keycloak_ldap_users_dn: ""
+keycloak_ldap_username_attribute: uid
+keycloak_ldap_rdn_attribute: uid
+keycloak_ldap_uuid_attribute: entryUUID
+keycloak_ldap_user_object_classes: inetOrgPerson, organizationalPerson
+keycloak_ldap_edit_mode: READ_ONLY
+keycloak_ldap_import_enabled: true
+keycloak_ldap_full_sync_period: 86400
+keycloak_ldap_changed_sync_period: 3600
+keycloak_ldap_mappers:
+  - name: email
+    providerId: user-attribute-ldap-mapper
+    providerType: org.keycloak.storage.ldap.mappers.LDAPStorageMapper
+    config:
+      ldap.attribute: mail
+      user.model.attribute: email
+      read.only: "true"
+      always.read.value.from.ldap: "false"
+      is.mandatory.in.ldap: "false"
+  - name: first name
+    providerId: user-attribute-ldap-mapper
+    providerType: org.keycloak.storage.ldap.mappers.LDAPStorageMapper
+    config:
+      ldap.attribute: givenName
+      user.model.attribute: firstName
+      read.only: "true"
+      always.read.value.from.ldap: "false"
+      is.mandatory.in.ldap: "false"
+  - name: last name
+    providerId: user-attribute-ldap-mapper
+    providerType: org.keycloak.storage.ldap.mappers.LDAPStorageMapper
+    config:
+      ldap.attribute: sn
+      user.model.attribute: lastName
+      read.only: "true"
+      always.read.value.from.ldap: "false"
+      is.mandatory.in.ldap: "false"
